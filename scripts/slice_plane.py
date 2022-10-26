@@ -9,6 +9,8 @@ load_dotenv()
 base_endpoint = os.getenv('LC_BASE_ENDPOINT')
 endpoint_download = base_endpoint + "/jobs"
 endpoint_get_slice = base_endpoint + "/generate-slice"
+endpoint_get_slice_stack = base_endpoint + "/generate-slice-stack"
+endpoint_get_metrics = base_endpoint + '/generate-metrics'
 access_token = os.getenv('LC_API_TOKEN')
 project_id = os.getenv('LC_PROJECT_ID')
 
@@ -135,14 +137,35 @@ def generate_slice(spec):
         "format": "png",
         'pos_x': 0,
         'pos_y': 0,
+        'pos_z': 60.0,
+        'dim_x': 192.0,
+        'dim_y': 120.0,
+        'res_x': 3840,
+        'res_y': 2400,
+        'rx': 25.0,
+        'ry': 0.0,
+        'rz': 0.0
+      }
+    headers = {"Authorization": "Bearer " + access_token}
+    res = requests.post(url, json=payload, headers=headers,stream=True, verify=True)
+    return res.json()
+
+def generate_metrics(spec):
+    url = endpoint_get_metrics + f"?projectId={project_id}"
+    payload = {
+        "spec": spec,
+        "name": "export_custom_mesh",
+        "sampler": "default",
+        'pos_x': 0,
+        'pos_y': 0,
         'pos_z': 0.0,
         'dim_x': 192.0,
         'dim_y': 120.0,
-        'res_x': 1920,
-        'res_y': 1200,
-        'rx': 0.0,
-        'ry': 0.0,
-        'rz': 0.0
+        'z_range': 120.0,
+        'grid_res_x': 16,
+        'grid_res_y': 16,
+        'grid_res_z': 16,
+        'closure': 0.0
       }
     headers = {"Authorization": "Bearer " + access_token}
     res = requests.post(url, json=payload, headers=headers,stream=True, verify=True)
@@ -167,10 +190,17 @@ def check_and_download(job_id, path):
 def main():
     # Generate some geometry and track the job_id
     spec = build_spec()
+
     job = generate_slice(spec)
     job_id = job['job_id']
     # poll the server until job is done
     while not check_and_download(job_id, f"./output/slice.png"):
+        time.sleep(0.25)
+
+    job = generate_metrics(spec)
+    job_id = job['job_id']
+    # poll the server until job is done
+    while not check_and_download(job_id, f"./output/metrics.json"):
         time.sleep(0.25)
 
 if __name__ == "__main__":

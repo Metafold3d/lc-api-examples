@@ -115,9 +115,9 @@ def generate_mesh(spec):
         'dim_x': 192.0,
         'dim_y': 120.0,
         'z_range': 120.0,
-        'grid_res_x': 256,
-        'grid_res_y': 256,
-        'grid_res_z': 256,
+        'grid_res_x': 64,
+        'grid_res_y': 64,
+        'grid_res_z': 64,
         'closure': 1.0
       }
     headers = {"Authorization": "Bearer " + access_token}
@@ -144,7 +144,7 @@ def check_and_download(job_id, path):
 def main():
     # Generate some geometry and track the job_id
     lattices = get_surface_lattices()
-    for i in range(0, 10):
+    for i in range(0, 1):
         rand_index = randint(0,len(lattices['surface_lattices'])-1)
         rand_lattice = lattices['surface_lattices'][rand_index]['contents']
         spec = build_spec(rand_lattice)
