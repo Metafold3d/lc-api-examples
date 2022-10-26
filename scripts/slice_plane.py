@@ -162,9 +162,9 @@ def generate_metrics(spec):
         'dim_x': 192.0,
         'dim_y': 120.0,
         'z_range': 120.0,
-        'grid_res_x': 16,
-        'grid_res_y': 16,
-        'grid_res_z': 16,
+        'grid_res_x': 64,
+        'grid_res_y': 64,
+        'grid_res_z': 64,
         'closure': 0.0
       }
     headers = {"Authorization": "Bearer " + access_token}
