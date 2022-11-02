@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" href="https://api.metafold3d.com/static/favicon.png">
+    <title>Hello Lattice</title>
+    <script async src="https://unpkg.com/es-module-shims@1.3.6/dist/es-module-shims.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+        "three": "https://api.metafold3d.com/static/three.module.js",
+        "three/addons/": "https://api.metafold3d.com/static/jsm/"
+        }
+    }
+    </script>
+
+    <style>
+        body {
+            display: block;
+            margin: 0px;
+        }
+
+        .canvas {
+            top: 0px;
+            left: 0px;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            outline: none;
+            border: none;
+            overflow: hidden;
+        }
+
+        .canvas :focus {
+            border: 0px solid #555;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="viewer" style="height: 100vh; padding: 0px; position:relative; overflow-y:hidden; overflow-x:hidden"></div>
+
+    <script type="module">
+
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { STLLoader } from 'three/addons/loaders/STLLoader.js'
+        import WebGL from 'three/addons/capabilities/WebGL.js';
+
+        if (WebGL.isWebGL2Available() === false) {
+
+            document.body.appendChild(WebGL.getWebGL2ErrorMessage());
+
+        }
+
+        //////////////////////////////////////
+        //Copy and paste access token from your account page 
+        const accessToken = '';
+        //Create a new project using the web app. Note the ID and enter it here.
+        const projectId = 0;
+        const baseEndpoint = 'https://api.metafold3d.com';
+        const endpointGenerateStl = baseEndpoint + '/generate-tri-mesh';
+        const queryString = window.location.search;
+        const urlParams = new URLSearchParams(queryString);
+        //////////////////////////////////////
+
+        let renderer,
+            scene,
+            camera,
+            controls,
+            matcap,
+            volume,
+            material;
+
+        init();
+
+        //This function builds the structure required by the backend to compute the volume. It is recommended that you configure this using the webapp.
+        //You can then copy and paste the JSON directly.
+        //IMPORTANT: any mesh assests need to be processed and already on the server.
+        function buildSpec() {
+            let spec = {
+                "assets": [
+                    {
+                        "type": "VolumeAsset",
+                        "id": 10,
+                        "display_name": "Volume Asset",
+                        "contents": {
+                            "path": "rockerArm.stl.bin",
+                            "center": {
+                                "x": 0,
+                                "y": 0,
+                                "z": 49.43155288696289
+                            },
+                            "extents": {
+                                "x": 194,
+                                "y": 60.265472412109375,
+                                "z": 100.86310577392578
+                            },
+                            "resolution": {
+                                "x": 128,
+                                "y": 128,
+                                "z": 128
+                            }
+                        }
+                    },
+                    {
+                        "type": "LatticeAsset",
+                        "id": 17,
+                        "display_name": "cub_Z08.0_E3",
+                        "contents": {
+                            "path": "cub_Z08.0_E3",
+                            "positions": [
+                                0,
+                                0,
+                                0,
+                                0,
+                                1,
+                                0,
+                                1,
+                                0,
+                                0,
+                                1,
+                                1,
+                                0,
+                                0,
+                                0,
+                                1,
+                                0,
+                                1,
+                                1,
+                                1,
+                                0,
+                                1,
+                                0.5,
+                                0.5,
+                                0.5,
+                                1,
+                                1,
+                                1
+                            ],
+                            "node_ids": [
+                                0,
+                                7,
+                                4,
+                                7,
+                                1,
+                                7,
+                                2,
+                                7,
+                                5,
+                                7,
+                                6,
+                                7,
+                                3,
+                                7,
+                                7,
+                                8
+                            ]
+                        }
+                    }
+                ],
+                "primitives": [
+                    {
+                        "type": "BoxPrim",
+                        "id": 11,
+                        "display_name": "Box Prim",
+                        "contents": {
+                            "extents": {
+                                "x": 194,
+                                "y": 60.265472412109375,
+                                "z": 100.86310577392578
+                            },
+                            "xform": {
+                                "translation": {
+                                    "x": 0,
+                                    "y": 0,
+                                    "z": 49.43155288696289
+                                },
+                                "rotation": {
+                                    "_x": 0,
+                                    "_y": 0,
+                                    "_z": 0,
+                                    "_w": 1
+                                },
+                                "euler": {
+                                    "x": 0,
+                                    "y": 0,
+                                    "z": 0
+                                },
+                                "scale": {
+                                    "x": 1,
+                                    "y": 1,
+                                    "z": 1
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "type": "LatticePrim",
+                        "id": 18,
+                        "display_name": "Lattice Prim",
+                        "contents": {
+                            "asset_id": 17,
+                            "node_radius": 5,
+                            "beam_radius": 1,
+                            "target_scale": 10,
+                            "smoothing": 0.001,
+                            "section_type": 0,
+                            "node_type": 0
+                        },
+                        "needsUpdate": false
+                    },
+                    {
+                        "type": "BoxPrim",
+                        "id": 19,
+                        "display_name": "Box Prim",
+                        "contents": {
+                            "extents": {
+                                "x": 192,
+                                "y": 120,
+                                "z": 120
+                            },
+                            "xform": {
+                                "translation": {
+                                    "x": 0,
+                                    "y": 0,
+                                    "z": 60
+                                },
+                                "rotation": {
+                                    "_x": 0,
+                                    "_y": 0,
+                                    "_z": 0,
+                                    "_w": 1
+                                },
+                                "euler": {
+                                    "x": 0,
+                                    "y": 0,
+                                    "z": 0
+                                },
+                                "scale": {
+                                    "x": 1,
+                                    "y": 1,
+                                    "z": 1
+                                }
+                            }
+                        }
+                    }
+                ],
+                "slice_operations": [
+                    {
+                        "type": "SliceSampledGrid",
+                        "id": 12,
+                        "display_name": "rockerArm.stl",
+                        "contents": {
+                            "parents": [],
+                            "volume_id": 10,
+                            "box_id": 11,
+                            "clip": 1
+                        }
+                    },
+                    {
+                        "type": "SliceLattice",
+                        "id": 20,
+                        "display_name": "Lattice Slice",
+                        "contents": {
+                            "parents": [
+                                0
+                            ],
+                            "lattice_id": 18,
+                            "box_id": 19,
+                            "grading_id": 0
+                        }
+                    },
+                    {
+                        "type": "SliceCSGOp",
+                        "id": 21,
+                        "display_name": "Combine Slice",
+                        "contents": {
+                            "parents": [
+                                12,
+                                20
+                            ],
+                            "csg_type": 2,
+                            "smoothing": 0.001
+                        }
+                    }
+                ],
+                "workspace_settings": {
+                    "printer_settings": {},
+                    "slice_params": {
+                        "build_volume": {
+                            "x": 132,
+                            "y": 74,
+                            "z": 200
+                        },
+                        "layer_thickness": 0.05,
+                        "topId": 21
+                    }
+                }
+            }
+
+            return spec;
+        }
+
+        //This function sends the request to generate an STL from the spec structure. The flow generally has three steps:
+        //1. Send the compute request. Receive the job structure.
+        //2. Poll the server by job id until the job is done.
+        //3. Download the asset/job result by using the job id.
+        function generateStl(patch, spec) {
+
+            var center = patch.translation;
+            var extents = patch.extents;
+
+            let name = `my_stl`;
+
+            fetch(endpointGenerateStl + `?projectId=${projectId}`, {
+                method: "POST",
+                mode: "cors",
+                headers: {
+                    "Authorization": `Bearer ${accessToken}`
+                },
+                body: JSON.stringify({
+                    "spec": spec,
+                    "name": name,
+                    "sampler": "default",
+                    'pos_x': center.x,
+                    'pos_y': center.y,
+                    'pos_z': center.z - 0.5 * (extents.z + 2),
+                    'dim_x': extents.x + 2,
+                    'dim_y': extents.y + 2,
+                    'z_range': extents.z + 2,
+                    'grid_res_x': patch.resolution.x,
+                    'grid_res_y': patch.resolution.y,
+                    'grid_res_z': patch.resolution.z,
+                    'closure': -0.125 * (new THREE.Vector3(extents.x, extents.y, extents.z).length() / patch.resolution.x)
+                })
+            }).then(response => {
+                response.json().then(job_data => {
+
+                    let job_id = job_data.job_id;
+
+                    var poll = setInterval(() => {
+
+                        //get job status
+                        fetch(baseEndpoint + `/jobs/${job_id}`, {
+                            method: "GET",
+                            mode: "cors",
+                            headers: {
+                                "Authorization": `Bearer ${accessToken}`
+                            }
+                        }).then(response => {
+
+                            response.json().then(job_status => {
+
+                                console.log(job_status);
+
+                                if (job_status.progress == 100) {
+
+
+                                    clearInterval(poll);
+
+                                    fetch(baseEndpoint + `/jobs/${job_id}?download=true`, {
+                                        method: "GET",
+                                        mode: "cors",
+                                        headers: {
+                                            "Authorization": `Bearer ${accessToken}`
+                                        }
+                                    }).then(job_status_response => {
+
+                                        return job_status_response.blob();
+
+                                    }).then((data) => {
+
+                                        var url = window.URL.createObjectURL(data);
+                                        var anchor = document.createElement("a");
+                                        let ext = ".stl"
+                                        anchor.href = url;
+                                        anchor.download = `${job_id}${ext}`;
+
+                                        anchor.click();
+
+                                        // Binary files           
+                                        const loader = new STLLoader();
+                                        loader.load(url, function (geometry) {
+
+                                            material = new THREE.MeshStandardMaterial( { color: 'f67104' });
+                                            const mesh = new THREE.Mesh(geometry, material);
+                                            mesh.castShadow = true;
+                                            mesh.receiveShadow = true;
+
+                                            scene.add(mesh);
+
+                                            render();
+
+                                        });
+
+                                        window.URL.revokeObjectURL(url);
+                                    });
+
+                                }
+                            });
+                        });
+
+                    }, 500);
+                });
+            });
+
+        }
+
+        function init() {
+
+            scene = new THREE.Scene();
+
+            scene.background = new THREE.Color('rgb(8, 145, 178)');
+
+            const ambLight = new THREE.AmbientLight(new THREE.Color("rgb(200, 200, 200)")); // soft white light
+            scene.add(ambLight);
+
+            let viewer = document.getElementById('viewer');
+
+            // Create renderer
+            renderer = new THREE.WebGLRenderer();
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            viewer.appendChild(renderer.domElement);
+
+            const aspect = window.innerWidth / window.innerHeight;
+
+            console.log(aspect);
+            camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000.0);
+            camera.up.set(0, 0, 1);
+            camera.position.set(0, 555, 285);
+
+            // Create controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.addEventListener('change', render);
+            controls.target.set(0, 0, 60);
+            controls.minZoom = 0.5;
+            controls.maxZoom = 4;
+            controls.enablePan = true;
+            controls.update();
+
+            //Define the patch. This is the region that backend will sample the volume in.
+            let patch = {
+                translation: { x: 0, y: 0, z: 60 },
+                extents: { x: 192, y: 120, z: 120 },
+                resolution: { x: 256, y: 256, z: 256 }
+            }
+
+            //Build the spec
+            let spec = buildSpec();
+
+            //Make the request
+            generateStl(patch, spec);
+
+            window.addEventListener('resize', onWindowResize);
+
+        }
+
+        function updateUniforms() {
+
+            render();
+
+        }
+
+        function onWindowResize() {
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+
+            render();
+
+        }
+
+        function render() {
+
+            renderer.render(scene, camera);
+
+        }
+
+    </script>
+</body>
