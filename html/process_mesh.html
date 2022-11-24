@@ -37,11 +37,29 @@
         .canvas :focus {
             border: 0px solid #555;
         }
+
+        .controls {
+            border-radius: 4px;
+            background-color: dimgrey;
+            width: 300px;
+            height: 200px;
+            z-index: 10;
+            left: 10px;
+            top: 10px;
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            padding: 5px;
+        }
     </style>
 </head>
 
 <body>
     <div id="viewer" style="height: 100vh; padding: 0px; position:relative; overflow-y:hidden; overflow-x:hidden"></div>
+
+    <div id="controls" class="controls">
+        <input type="file" id="fileUpload">
+    </div>
 
     <script type="module">
 
@@ -62,6 +80,9 @@
         //Create a new project using the web app. Note the ID and enter it here.
         const projectId = -1;
         const baseEndpoint = 'https://api.metafold3d.com';
+        const endpointUpload = baseEndpoint + '/upload-model';
+        const endpointProcessModel = baseEndpoint + '/process-model';
+        const endpointBeamLattices = baseEndpoint + '/get-beam-lattices';
         const endpointGenerateStl = baseEndpoint + '/generate-tri-mesh';
         const queryString = window.location.search;
         const urlParams = new URLSearchParams(queryString);
@@ -80,7 +101,7 @@
         //This function builds the structure required by the backend to compute the volume. It is recommended that you configure this using the webapp.
         //You can then copy and paste the JSON directly.
         //IMPORTANT: any mesh assests need to be processed and already on the server.
-        function buildSpec() {
+        function buildSpec(asset) {
             let spec = {
                 "assets": [
                     {
@@ -88,7 +109,7 @@
                         "id": 10,
                         "display_name": "Volume Asset",
                         "contents": {
-                            "path": "rockerArm.stl.bin",
+                            "path": asset + ".bin",
                             "center": {
                                 "x": 0,
                                 "y": 0,
@@ -380,13 +401,13 @@
                                         anchor.href = url;
                                         anchor.download = `${job_id}${ext}`;
 
-                                        anchor.click();
+                                        // anchor.click();
 
                                         // Binary files           
                                         const loader = new STLLoader();
                                         loader.load(url, function (geometry) {
 
-                                            material = new THREE.MeshStandardMaterial( { color: 'f67104' });
+                                            material = new THREE.MeshStandardMaterial({ color: 'rgb(128, 128, 128)' });
                                             const mesh = new THREE.Mesh(geometry, material);
                                             mesh.castShadow = true;
                                             mesh.receiveShadow = true;
@@ -434,7 +455,7 @@
             camera.up.set(0, 0, 1);
             camera.position.set(0, 555, 285);
 
-            // Create controls
+            // Create 3d controls
             controls = new OrbitControls(camera, renderer.domElement);
             controls.addEventListener('change', render);
             controls.target.set(0, 0, 60);
@@ -443,18 +464,26 @@
             controls.enablePan = true;
             controls.update();
 
-            //Define the patch. This is the region that backend will sample the volume in.
-            let patch = {
-                translation: { x: 0, y: 0, z: 60 },
-                extents: { x: 192, y: 120, z: 120 },
-                resolution: { x: 256, y: 256, z: 256 }
-            }
+            //define file loading behaviour
+            document.getElementById('fileUpload').addEventListener('change', e => {
+                let assetName = e?.target?.files?.[0].name
+                addDesignSpace(e, job_status => {
+                    //Define the patch. This is the region that backend will sample the volume in.
+                    let patch = {
+                        translation: { x: 0, y: 0, z: 60 },
+                        extents: { x: 192, y: 120, z: 120 },
+                        resolution: { x: 256, y: 256, z: 256 }
+                    }
 
-            //Build the spec
-            let spec = buildSpec();
+                    //Build the spec
+                    let spec = buildSpec(assetName);
 
-            //Make the request
-            generateStl(patch, spec);
+                    //Make the request
+                    generateStl(patch, spec);
+                });
+            })
+
+
 
             window.addEventListener('resize', onWindowResize);
 
@@ -481,6 +510,141 @@
             renderer.render(scene, camera);
 
         }
+
+        function addDesignSpace(e, callback) {
+            const file = e?.target?.files?.[0];
+
+            console.log("e", e);
+
+            if (file == null) {
+                return;
+            }
+
+            //FIXME
+            let nx = 128;
+            let ny = 128;
+            let nz = 128;
+
+            let padding = {x: 1.0, y: 1.0, z: 1.0};
+
+            if (file) {
+
+                console.log("uploading");
+
+                //upload the new model asset
+                var formData = new FormData();
+                formData.append("file", file);
+                var requestOptions = {
+                    mode: "cors",
+                    method: "POST",
+                    files: file,
+                    body: formData,
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                    },
+                };
+
+                fetch(
+                    endpointUpload + `?projectId=${projectId}`,
+                    requestOptions
+                ).then((response) => {
+                    console.log("Done uploading. Start processing..");
+                    fetch(endpointProcessModel + `?projectId=${projectId}`, {
+                        method: "POST",
+                        mode: "cors",
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                        },
+                        body: JSON.stringify({
+                            name: "model_process_test",
+                            asset: file.name,
+                            use_cache: false,
+                            resolution: nx,
+                            padding: padding,
+                        }),
+                    })
+                        .catch((e) => {
+                            console.log(e);
+                        })
+                        .then((response) => {
+                            if (file) {
+                                response.json().then((job_data) => {
+                                    console.log(job_data);
+
+                                    // var asset = new Types.MeshAsset();
+                                    // asset.contents.path = file.name;
+                                    let new_box_min = new THREE.Vector3(
+                                        job_data.model_stats.box_min[0],
+                                        job_data.model_stats.box_min[1],
+                                        job_data.model_stats.box_min[2]
+                                    );
+                                    let new_box_max = new THREE.Vector3(
+                                        job_data.model_stats.box_max[0],
+                                        job_data.model_stats.box_max[1],
+                                        job_data.model_stats.box_max[2]
+                                    );
+                                    let new_box = new THREE.Box3(new_box_min, new_box_max);
+                                    let new_extents = new THREE.Vector3(
+                                        new_box.max.x - new_box.min.x,
+                                        new_box.max.y - new_box.min.y,
+                                        new_box.max.z - new_box.min.z
+                                    );
+                                    let new_center = new THREE.Vector3(
+                                        job_data.model_stats.origin[0],
+                                        job_data.model_stats.origin[1],
+                                        job_data.model_stats.origin[2]
+                                    );
+
+                                    let new_params = {
+                                        center: { x: new_center.x, y: new_center.y, z: new_center.z },
+                                        extents: {
+                                            x: new_extents.x,
+                                            y: new_extents.y,
+                                            z: new_extents.z,
+                                        },
+                                        resolution: { x: nx, y: ny, z: nz },
+                                    };
+
+                                    let job_id = job_data.job_id;
+
+                                    var poll = setInterval(() => {
+                                        fetch(baseEndpoint + `/jobs/${job_id}`, {
+                                            method: "GET",
+                                            mode: "cors",
+                                            headers: {
+                                                Authorization: `Bearer ${accessToken}`,
+                                            },
+                                        })
+                                            .then((response) => {
+                                                response.json().then((job_status) => {
+                                                    if (job_status.progress == 100) {
+                                                        clearInterval(poll);
+                                                        let asset_id = job_status.job_id;
+
+                                                        console.log("Process model compelete!");
+
+                                                        //callback when process is compelete and there are no errors.
+                                                        //At this point, the mesh has been converted to a volume representation and save to the project folder.
+                                                        //The convention is that the name of the volume asset is <file name>.<ext>.bin
+                                                        callback(job_status);
+
+                                                    }
+                                                });
+                                            })
+                                            .catch((e) => {
+                                                clearInterval(poll);
+                                            });
+                                    }, 1000);
+
+                                });
+                            }
+                        })
+                        .finally(() => {
+                            console.log("Done...");
+                        });
+                });
+            }
+        };
 
     </script>
 </body>
